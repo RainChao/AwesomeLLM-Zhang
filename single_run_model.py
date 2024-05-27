@@ -1,3 +1,5 @@
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 import os
 import requests
 import math
@@ -7,6 +9,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 # Hyperparameters
+epoch = 1
 batch_size = 4  # How many batches per training step
 context_length = 16  # Length of the token chunk each batch
 d_model = 64  # The size of our model token embeddings
@@ -14,10 +17,9 @@ num_blocks = 8  # Number of transformer blocks
 num_heads = 4  # Number of heads in Multi-head attention
 learning_rate = 1e-3  # 0.001
 dropout = 0.1  # Dropout rate
-max_iters = 5000  # Total of training iterations <- Change this to smaller number for testing
-eval_interval = 50  # How often to evaluate
 eval_iters = 20  # Number of iterations to average for evaluation
-device = 'cuda' if torch.cuda.is_available() else 'cpu'  # Use GPU if it's available.
+# Use GPU if it's available.
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 TORCH_SEED = 1337
 torch.manual_seed(TORCH_SEED)
 
@@ -33,8 +35,10 @@ with open('data/sales_textbook.txt', 'r', encoding='utf-8') as f:
 # Using TikToken (Same as GPT3) to tokenize the source text
 encoding = tiktoken.get_encoding("cl100k_base")
 tokenized_text = encoding.encode(text)
-max_token_value = max(tokenized_text) + 1  # the maximum value of the tokenized numbers
-tokenized_text = torch.tensor(tokenized_text, dtype=torch.long, device=device)  # put tokenized text into tensor
+# the maximum value of the tokenized numbers
+max_token_value = max(tokenized_text) + 1
+# put tokenized text into tensor
+tokenized_text = torch.tensor(tokenized_text, dtype=torch.long, device=device)
 
 # Split train and validation
 split_idx = int(len(tokenized_text) * 0.9)
@@ -68,15 +72,19 @@ class Attention(nn.Module):
         self.context_length = context_length
         self.dropout = dropout
 
-        self.key_layer = nn.Linear(in_features=self.d_model, out_features=self.head_size, bias=False)
-        self.query_layer = nn.Linear(in_features=self.d_model, out_features=self.head_size, bias=False)
-        self.value_layer = nn.Linear(in_features=self.d_model, out_features=self.head_size, bias=False)
+        self.key_layer = nn.Linear(
+            in_features=self.d_model, out_features=self.head_size, bias=False)
+        self.query_layer = nn.Linear(
+            in_features=self.d_model, out_features=self.head_size, bias=False)
+        self.value_layer = nn.Linear(
+            in_features=self.d_model, out_features=self.head_size, bias=False)
         self.register_buffer('tril', torch.tril(
             torch.ones((self.context_length, self.context_length))))  # Lower triangular mask
         self.dropout_layer = nn.Dropout(self.dropout)
 
     def forward(self, x):
-        B, T, C = x.shape  # Batch size, Time steps(current context_length), Channels(dimensions)
+        # Batch size, Time steps(current context_length), Channels(dimensions)
+        B, T, C = x.shape
         assert T <= self.context_length
         assert C == self.d_model
         q = self.query_layer(x)
@@ -104,8 +112,10 @@ class MultiHeadAttention(nn.Module):
         self.context_length = context_length
         self.dropout = dropout
 
-        self.heads = nn.ModuleList([Attention(head_size=self.head_size) for _ in range(self.num_heads)])
-        self.projection_layer = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        self.heads = nn.ModuleList(
+            [Attention(head_size=self.head_size) for _ in range(self.num_heads)])
+        self.projection_layer = nn.Linear(
+            in_features=self.d_model, out_features=self.d_model)
         self.dropout_layer = nn.Dropout(dropout)
 
     def forward(self, x):
@@ -121,11 +131,13 @@ class TransformerBlock(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.context_length = context_length
-        self.head_size = d_model // num_heads  # head size should be divisible by d_model
+        # head size should be divisible by d_model
+        self.head_size = d_model // num_heads
         self.num_heads = num_heads
         self.dropout = dropout
 
-        self.multi_head_attention_layer = MultiHeadAttention(head_size=self.head_size)
+        self.multi_head_attention_layer = MultiHeadAttention(
+            head_size=self.head_size)
         self.feed_forward_layer = FeedForward()
         self.layer_norm_1 = nn.LayerNorm(normalized_shape=self.d_model)
         self.layer_norm_2 = nn.LayerNorm(normalized_shape=self.d_model)
@@ -133,8 +145,10 @@ class TransformerBlock(nn.Module):
     def forward(self, x):
         # Note: The order of the operations is different from the original Transformer paper
         # The order here is: LayerNorm -> Multi-head attention -> LayerNorm -> Feed forward
-        x = x + self.multi_head_attention_layer(self.layer_norm_1(x))  # Residual connection
-        x = x + self.feed_forward_layer(self.layer_norm_2(x))  # Residual connection
+        # Residual connection
+        x = x + self.multi_head_attention_layer(self.layer_norm_1(x))
+        # Residual connection
+        x = x + self.feed_forward_layer(self.layer_norm_2(x))
         return x
 
 
@@ -148,15 +162,17 @@ class TransformerLanguageModel(nn.Module):
         self.dropout = dropout
         self.max_token_value = max_token_value
         # Set up token embedding look-up table
-        self.token_embedding_lookup_table = nn.Embedding(num_embeddings=self.max_token_value + 1, embedding_dim=self.d_model)
+        self.token_embedding_lookup_table = nn.Embedding(
+            num_embeddings=self.max_token_value + 1, embedding_dim=self.d_model)
 
         # Run all the transformer blocks
         # Different from original paper, here we add a final layer norm after all the blocks
         self.transformer_blocks = nn.Sequential(*(
-                [TransformerBlock(num_heads=self.num_heads) for _ in range(self.num_blocks)] +
-                [nn.LayerNorm(self.d_model)]
+            [TransformerBlock(num_heads=self.num_heads) for _ in range(self.num_blocks)] +
+            [nn.LayerNorm(self.d_model)]
         ))
-        self.language_model_out_linear_layer = nn.Linear(in_features=self.d_model, out_features=self.max_token_value)
+        self.language_model_out_linear_layer = nn.Linear(
+            in_features=self.d_model, out_features=self.max_token_value)
 
     def forward(self, idx, targets=None):
         B, T = idx.shape
@@ -164,11 +180,16 @@ class TransformerLanguageModel(nn.Module):
         # Set up position embedding look-up table
         # following the same approach as the original Transformer paper (Sine and Cosine functions)
         """
-        position_encoding_lookup_table = torch.zeros(self.context_length, self.d_model)
-        position = torch.arange(0, self.context_length, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, self.d_model, 2).float() * (-math.log(10000.0) / self.d_model))
-        position_encoding_lookup_table[:, 0::2] = torch.sin(position * div_term)
-        position_encoding_lookup_table[:, 1::2] = torch.cos(position * div_term)
+        position_encoding_lookup_table = torch.zeros(
+            self.context_length, self.d_model)
+        position = torch.arange(0, self.context_length,
+                                dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(
+            0, self.d_model, 2).float() * (-math.log(10000.0) / self.d_model))
+        position_encoding_lookup_table[:, 0::2] = torch.sin(
+            position * div_term)
+        position_encoding_lookup_table[:, 1::2] = torch.cos(
+            position * div_term)
         # change position_encoding_lookup_table from (context_length, d_model) to (T, d_model)
         position_embedding = position_encoding_lookup_table[:T, :].to(device)
         x = self.token_embedding_lookup_table(idx) + position_embedding
@@ -180,7 +201,8 @@ class TransformerLanguageModel(nn.Module):
             B, T, C = logits.shape
             logits_reshaped = logits.view(B * T, C)
             targets_reshaped = targets.view(B * T)
-            loss = F.cross_entropy(input=logits_reshaped, target=targets_reshaped)
+            loss = F.cross_entropy(input=logits_reshaped,
+                                   target=targets_reshaped)
         else:
             loss = None
         return logits, loss
@@ -211,43 +233,75 @@ model = model.to(device)
 # Get input embedding batch
 def get_batch(split: str):
     data = train_data if split == 'train' else val_data
-    idxs = torch.randint(low=0, high=len(data) - context_length, size=(batch_size,))
-    x = torch.stack([data[idx:idx + context_length] for idx in idxs]).to(device)
-    y = torch.stack([data[idx + 1:idx + context_length + 1] for idx in idxs]).to(device)
+    idxs = torch.randint(low=0, high=len(
+        data) - context_length, size=(batch_size,))
+    x = torch.stack([data[idx:idx + context_length]
+                    for idx in idxs]).to(device)
+    y = torch.stack([data[idx + 1:idx + context_length + 1]
+                    for idx in idxs]).to(device)
     return x, y
 
 
-# Calculate loss
+class SequenceBatch(Dataset):
+    def __init__(self, data, context_length):
+        self.data = data
+        self.context_length = context_length
+
+    def __getitem__(self, index):
+        return (self.data[index:index + self.context_length],
+                self.data[index+1:index + self.context_length + 1])
+
+    def __len__(self):
+        return len(self.data)-self.context_length
+
+
+torch.manual_seed(123)
+train_dataset = SequenceBatch(train_data, context_length)
+train_loader = DataLoader(
+    dataset=train_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    drop_last=True,
+)
+eval_dataset = SequenceBatch(val_data, context_length)
+eval_loader = DataLoader(
+    dataset=eval_dataset,
+    batch_size=batch_size,
+    shuffle=False,
+    drop_last=True,
+)
+
+
 @torch.no_grad()
-def estimate_loss():
-    out = {}
+def evaluate_loss(data_set):
+    losses = []
     model.eval()
-    for split in ['train', 'valid']:
-        losses = torch.zeros(eval_iters)
-        for k in range(eval_iters):
-            x_batch, y_batch = get_batch(split)
-            logits, loss = model(x_batch, y_batch)
-            losses[k] = loss.item()
-        out[split] = losses.mean()
+    for x_batch, y_batch in data_set:
+        _, loss = model(x_batch, y_batch)
+        losses.append(loss.item())
     model.train()
-    return out
+    return torch.mean(torch.tensor(losses))
 
 
-# Use AdamW optimizer
-optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate)
-tracked_losses = list()
-for step in range(max_iters):
-    if step % eval_iters == 0 or step == max_iters - 1:
-        losses = estimate_loss()
-        tracked_losses.append(losses)
-        print('Step:', step, 'Training Loss:', round(losses['train'].item(), 3), 'Validation Loss:',
-              round(losses['valid'].item(), 3))
+def train_loop():
+    # Use AdamW optimizer
+    optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate)
+    for _ in range(epoch):
+        step = 0
+        for x_batch, y_batch in train_loader:
+            _, loss = model(x_batch, y_batch)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            step += 1
+            if step % eval_iters == 0:
+                eval_loss = evaluate_loss(eval_loader)
+                print('Step:', step, 'Evaluate Loss:', round(
+                    eval_loss.item(), 3), 'Train Loss:', round(loss.item(), 3))
+        print('Epoch={} end, Start next Epoch={}'.format(epoch, epoch+1))
 
-    xb, yb = get_batch('train')
-    logits, loss = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+
+train_loop()
 
 # Save the model state dictionary
 torch.save(model.state_dict(), 'model-ckpt.pt')
