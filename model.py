@@ -121,7 +121,7 @@ class TransformerBlock(nn.Module):
 
 
 class TransformerLanguageModel(nn.Module):
-    def __init__(self, context_length, max_token_value=120000):
+    def __init__(self, context_length, max_token_value=120000, device='cpu'):
         super().__init__()
         self.d_model = d_model
         self.context_length = context_length
@@ -129,6 +129,7 @@ class TransformerLanguageModel(nn.Module):
         self.num_blocks = num_blocks
         self.dropout = dropout
         self.max_token_value = max_token_value
+        self.device = device
         # Set up token embedding look-up table
         self.token_embedding_lookup_table = nn.Embedding(
             num_embeddings=self.max_token_value + 1, embedding_dim=self.d_model)
@@ -148,18 +149,19 @@ class TransformerLanguageModel(nn.Module):
         # Set up position embedding look-up table
         # following the same approach as the original Transformer paper (Sine and Cosine functions)
         """
+        # change position_encoding_lookup_table from (context_length, d_model) to (T, d_model)
         position_encoding_lookup_table = torch.zeros(
             self.context_length, self.d_model)
         position = torch.arange(0, self.context_length,
-                                dtype=torch.float).unsqueeze(1)
+                                dtype=torch.float, device=idx.device).unsqueeze(1)
         div_term = torch.exp(torch.arange(
-            0, self.d_model, 2).float() * (-math.log(10000.0) / self.d_model))
+            0, self.d_model, 2, device=idx.device).float() * (-math.log(10000.0) / self.d_model))
         position_encoding_lookup_table[:, 0::2] = torch.sin(
             position * div_term)
         position_encoding_lookup_table[:, 1::2] = torch.cos(
             position * div_term)
-        # change position_encoding_lookup_table from (context_length, d_model) to (T, d_model)
-        position_embedding = position_encoding_lookup_table[:T, :]
+        position_embedding = position_encoding_lookup_table[:T, :].to(
+            idx.device)
         x = self.token_embedding_lookup_table(idx) + position_embedding
         x = self.transformer_blocks(x)
         # The "logits" are the output values of our model before applying softmax

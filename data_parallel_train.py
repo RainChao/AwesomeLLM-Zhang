@@ -3,6 +3,10 @@ import torch.nn as nn
 from model import TransformerLanguageModel
 from data_set import *
 
+
+# 总结
+# 1. 数据并行模式下，在每个model的forward运行过程中保证算子的
+
 # Hyperparameters
 epoch = 1
 batch_size = 4  # How many batches per training step
