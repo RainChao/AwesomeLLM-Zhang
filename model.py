@@ -8,42 +8,11 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# Hyperparameters
-epoch = 1
-batch_size = 4  # How many batches per training step
 context_length = 16  # Length of the token chunk each batch
 d_model = 64  # The size of our model token embeddings
 num_blocks = 8  # Number of transformer blocks
 num_heads = 4  # Number of heads in Multi-head attention
-learning_rate = 1e-3  # 0.001
 dropout = 0.1  # Dropout rate
-eval_iters = 20  # Number of iterations to average for evaluation
-# Use GPU if it's available.
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-TORCH_SEED = 1337
-torch.manual_seed(TORCH_SEED)
-
-# Load training data
-if not os.path.exists('data/sales_textbook.txt'):
-    url = 'https://huggingface.co/datasets/goendalf666/sales-textbook_for_convincing_and_selling/raw/main/sales_textbook.txt'
-    with open('data/sales_textbook.txt', 'w') as f:
-        f.write(requests.get(url).text)
-
-with open('data/sales_textbook.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
-
-# Using TikToken (Same as GPT3) to tokenize the source text
-encoding = tiktoken.get_encoding("cl100k_base")
-tokenized_text = encoding.encode(text)
-# the maximum value of the tokenized numbers
-max_token_value = max(tokenized_text) + 1
-# put tokenized text into tensor
-tokenized_text = torch.tensor(tokenized_text, dtype=torch.long, device=device)
-
-# Split train and validation
-split_idx = int(len(tokenized_text) * 0.9)
-train_data = tokenized_text[:split_idx]
-val_data = tokenized_text[split_idx:]
 
 
 # Define Feed Forward Network
@@ -126,7 +95,6 @@ class MultiHeadAttention(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-
     def __init__(self, num_heads: int):
         super().__init__()
         self.d_model = d_model
@@ -153,7 +121,7 @@ class TransformerBlock(nn.Module):
 
 
 class TransformerLanguageModel(nn.Module):
-    def __init__(self):
+    def __init__(self, context_length, max_token_value=120000):
         super().__init__()
         self.d_model = d_model
         self.context_length = context_length
@@ -191,7 +159,7 @@ class TransformerLanguageModel(nn.Module):
         position_encoding_lookup_table[:, 1::2] = torch.cos(
             position * div_term)
         # change position_encoding_lookup_table from (context_length, d_model) to (T, d_model)
-        position_embedding = position_encoding_lookup_table[:T, :].to(device)
+        position_embedding = position_encoding_lookup_table[:T, :]
         x = self.token_embedding_lookup_table(idx) + position_embedding
         x = self.transformer_blocks(x)
         # The "logits" are the output values of our model before applying softmax
@@ -205,7 +173,7 @@ class TransformerLanguageModel(nn.Module):
                                    target=targets_reshaped)
         else:
             loss = None
-        return logits, loss
+        return (logits, loss)
 
     def generate(self, idx, max_new_tokens):
         # idx is (B,T) array of indices in the current context
@@ -223,96 +191,3 @@ class TransformerLanguageModel(nn.Module):
             # Append the sampled indexes idx_next to idx
             idx = torch.cat((idx, idx_next), dim=1)
         return idx
-
-
-# Initialize the model
-model = TransformerLanguageModel()
-model = model.to(device)
-
-
-# Get input embedding batch
-def get_batch(split: str):
-    data = train_data if split == 'train' else val_data
-    idxs = torch.randint(low=0, high=len(
-        data) - context_length, size=(batch_size,))
-    x = torch.stack([data[idx:idx + context_length]
-                    for idx in idxs]).to(device)
-    y = torch.stack([data[idx + 1:idx + context_length + 1]
-                    for idx in idxs]).to(device)
-    return x, y
-
-
-class SequenceBatch(Dataset):
-    def __init__(self, data, context_length):
-        self.data = data
-        self.context_length = context_length
-
-    def __getitem__(self, index):
-        return (self.data[index:index + self.context_length],
-                self.data[index+1:index + self.context_length + 1])
-
-    def __len__(self):
-        return len(self.data)-self.context_length
-
-
-torch.manual_seed(123)
-train_dataset = SequenceBatch(train_data, context_length)
-train_loader = DataLoader(
-    dataset=train_dataset,
-    batch_size=batch_size,
-    shuffle=True,
-    drop_last=True,
-)
-eval_dataset = SequenceBatch(val_data, context_length)
-eval_loader = DataLoader(
-    dataset=eval_dataset,
-    batch_size=batch_size,
-    shuffle=False,
-    drop_last=True,
-)
-
-
-@torch.no_grad()
-def evaluate_loss(data_set):
-    losses = []
-    model.eval()
-    for x_batch, y_batch in data_set:
-        _, loss = model(x_batch, y_batch)
-        losses.append(loss.item())
-    model.train()
-    return torch.mean(torch.tensor(losses))
-
-
-def train_loop():
-    # Use AdamW optimizer
-    optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate)
-    for _ in range(epoch):
-        step = 0
-        for x_batch, y_batch in train_loader:
-            _, loss = model(x_batch, y_batch)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            step += 1
-            if step % eval_iters == 0:
-                eval_loss = evaluate_loss(eval_loader)
-                print('Step:', step, 'Evaluate Loss:', round(
-                    eval_loss.item(), 3), 'Train Loss:', round(loss.item(), 3))
-        print('Epoch={} end, Start next Epoch={}'.format(epoch, epoch+1))
-
-
-train_loop()
-
-# Save the model state dictionary
-torch.save(model.state_dict(), 'model-ckpt.pt')
-
-# Generate
-model.eval()
-start = 'The salesperson'
-start_ids = encoding.encode(start)
-x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
-y = model.generate(x, max_new_tokens=100)
-print('---------------')
-print(encoding.decode(y[0].tolist()))
-print('---------------')
-
