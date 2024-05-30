@@ -8,8 +8,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-context_length = 16  # Length of the token chunk each batch
-d_model = 64  # The size of our model token embeddings
+context_length = 64  # Length of the token chunk each batch
+d_model = 256  # The size of our model token embeddings
 num_blocks = 8  # Number of transformer blocks
 num_heads = 4  # Number of heads in Multi-head attention
 dropout = 0.1  # Dropout rate
@@ -153,9 +153,9 @@ class TransformerLanguageModel(nn.Module):
         position_encoding_lookup_table = torch.zeros(
             self.context_length, self.d_model)
         position = torch.arange(0, self.context_length,
-                                dtype=torch.float, device=idx.device).unsqueeze(1)
+                                dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(
-            0, self.d_model, 2, device=idx.device).float() * (-math.log(10000.0) / self.d_model))
+            0, self.d_model, 2).float() * (-math.log(10000.0) / self.d_model))
         position_encoding_lookup_table[:, 0::2] = torch.sin(
             position * div_term)
         position_encoding_lookup_table[:, 1::2] = torch.cos(
