@@ -12,8 +12,9 @@ from data_set import *
 
 # Hyperparameters
 epoch = 1
-batch_size = 4  # How many batches per training step
-context_length = 16  # Length of the token chunk each batch
+batch_size = 128  # How many batches per training step
+# Length of the token chunk each batch
+context_length = 64
 learning_rate = 1e-3  # 0.001
 eval_iters = 20  # Number of iterations to average for evaluation
 # Use GPU if it's available.
@@ -64,16 +65,5 @@ def train_loop():
 
 
 train_loop()
-
 # Save the model state dictionary
 torch.save(model.state_dict(), 'model-ckpt.pt')
-
-# Generate
-model.eval()
-start = 'The salesperson'
-start_ids = text_to_ids(start)
-x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
-y = model.generate(x, max_new_tokens=100)
-print('---------------')
-print(idx_to_text(y[0].tolist()))
-print('---------------')
