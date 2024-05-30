@@ -5,7 +5,10 @@ from data_set import *
 
 
 # 总结
-# 1. 数据并行模式下，在每个model的forward运行过程中保证算子的
+# 1. 数据并行模式下，在每个model的forward运行过程，需要保证算子的所有tensor都位于同一个device上。
+# 2. distribute_model.forward返回的tensor是位于cuda:0上，而且会将每个modle副本返回的tensor在batch维度进行cat:
+#    例子1: model0返回scalar0, model1返回scalar1, distribute_model返回[scalar0, scalar1]
+#    例子2: model0返回tensor0 (shape=[2,3]), model1返回tensor1(shape=[2,3]), distribute_model返回shape=[4,3]
 
 # Hyperparameters
 epoch = 1
