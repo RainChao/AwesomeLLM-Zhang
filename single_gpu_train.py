@@ -4,12 +4,12 @@ from data_set import *
 
 # Hyperparameters
 epoch = 1
-batch_size = 4  # How many batches per training step
+batch_size = 128  # How many batches per training step
 context_length = 64  # Length of the token chunk each batch
 learning_rate = 1e-3  # 0.001
 eval_iters = 20  # Number of iterations to average for evaluation
 # Use GPU if it's available.
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 TORCH_SEED = 1337
 torch.manual_seed(TORCH_SEED)
 
@@ -25,8 +25,8 @@ def evaluate_loss(data_set):
     losses = []
     model.eval()
     for x_batch, y_batch in data_set:
-        x_batch.to(device)
-        y_batch.to(device)
+        x_batch = x_batch.to(device)
+        y_batch = y_batch.to(device)
         _, loss = model(x_batch, y_batch)
         losses.append(loss.item())
     model.train()
@@ -39,8 +39,8 @@ def train_loop():
     for _ in range(epoch):
         step = 0
         for x_batch, y_batch in train_loader:
-            x_batch.to(device)
-            y_batch.to(device)
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
             _, loss = model(x_batch, y_batch)
             optimizer.zero_grad()
             loss.backward()

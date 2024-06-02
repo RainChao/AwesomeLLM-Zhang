@@ -15,6 +15,7 @@ for param_key in loaded_state_dict:
     new_loaded_state_dict[new_param_key] = loaded_state_dict[param_key]
 predict_model.load_state_dict(new_loaded_state_dict)
 predict_model = predict_model.to(device)
+predict_model.eval()
 start = 'The salesperson'
 start_ids = text_to_ids(start)
 x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
