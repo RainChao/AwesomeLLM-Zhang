@@ -65,6 +65,9 @@ def train_loop(local_rank):
                 eval_loss = evaluate_loss(model, eval_loader, device)
                 print('Step:', step, 'Evaluate Loss:', round(
                     eval_loss.item(), 3), 'Train Loss:', round(loss.item(), 3))
+    if 0 == local_rank:
+        # Save the model state dictionary
+        torch.save(model.state_dict(), 'model-ckpt.pt')
 
 
 def init_processes(local_rank, world_size, fn, backend='nccl'):

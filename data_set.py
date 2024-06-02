@@ -5,7 +5,7 @@ import os
 import requests
 import tiktoken
 import torch
-import Random
+from random import Random
 
 
 # Using TikToken (Same as GPT3) to tokenize the source text
@@ -143,6 +143,8 @@ def partition_dataset(batch_size, context_length):
         shuffle=False,
         drop_last=True,
     )
+    
+    eval_dataset = SequenceBatch(eval_dataset, context_length)
     eval_loader = DataLoader(
         dataset=eval_dataset,
         batch_size=mini_batch_size,
