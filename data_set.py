@@ -16,7 +16,7 @@ def get_local_tokenizer():
     """Get global tokenizer for this project"""
     global local_tokenizer
     if local_tokenizer is None:
-        local_tokenizer = tiktoken.get_encoding("cl100k_base")
+        local_tokenizer = tiktoken.get_encoding("gpt2")
     return local_tokenizer
 
 

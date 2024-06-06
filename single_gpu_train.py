@@ -1,24 +1,57 @@
+import os
+import pickle
+
 import torch
-from model import TransformerLanguageModel
+from model import GPTConfig, GPT
 from data_set import *
 
 # Hyperparameters
-epoch = 1
-batch_size = 128  # How many batches per training step
-context_length = 64  # Length of the token chunk each batch
-learning_rate = 1e-3  # 0.001
-eval_iters = 20  # Number of iterations to average for evaluation
-# Use GPU if it's available.
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 TORCH_SEED = 1337
 torch.manual_seed(TORCH_SEED)
 
-train_loader, eval_loader, max_token_value = get_dataloader(
-    batch_size, context_length)
-model = TransformerLanguageModel(context_length=context_length,
-                                 max_token_value=max_token_value, device=device)
-model = model.to(device)
+data_dir = ''
+out_dir = 'out'
+batch_size = 32  # How many batches per training step
+init_from = 'scratch'
+eval_interval = 50  # Number of iterations to average for evaluation
+learning_rate = 1e-3  # 0.001
 
+n_layer = 3
+n_head = 12
+n_embd = 120
+block_size = 128
+bias = True
+vocab_size = None
+dropout = 0.0
+# attempt to derive vocab_size from the dataset
+meta_path = os.path.join(data_dir, 'meta.pkl')
+meta_vocab_size = None
+if os.path.exists(meta_path):
+    with open(meta_path, 'rb') as f:
+        meta = pickle.load(f)
+    meta_vocab_size = meta['vocab_size']
+    print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
+model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
+                  bias=bias, vocab_size=None, dropout=dropout)
+
+train_loader, eval_loader, max_token_value = get_dataloader(
+    batch_size, block_size)
+
+
+if init_from == 'scratch':
+    print('Initializing model from scratch')
+    if meta_vocab_size is None:
+        print(
+            "defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)")
+    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
+    gptconf = GPTConfig(**model_args)
+    model = GPT(gptconf)
+elif init_from == 'resume':
+    pass
+model = model.to(device)
+# initialize a GradScaler. If enabled=False scaler is a no-op
+# scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
 @torch.no_grad()
 def evaluate_loss(data_set):
@@ -36,34 +69,24 @@ def evaluate_loss(data_set):
 def train_loop():
     # Use AdamW optimizer
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate)
-    for _ in range(epoch):
-        step = 0
-        for x_batch, y_batch in train_loader:
-            x_batch = x_batch.to(device)
-            y_batch = y_batch.to(device)
-            _, loss = model(x_batch, y_batch)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            step += 1
-            if step % eval_iters == 0:
-                eval_loss = evaluate_loss(eval_loader)
-                print('Step:', step, 'Evaluate Loss:', round(
-                    eval_loss.item(), 3), 'Train Loss:', round(loss.item(), 3))
-        print('Epoch={} end, Start next Epoch={}'.format(epoch, epoch+1))
+    step = 0
+    for x_batch, y_batch in train_loader:
+        x_batch = x_batch.to(device)
+        y_batch = y_batch.to(device)
+        _, loss = model(x_batch, y_batch)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        step += 1
+        if step % eval_interval == 0:
+            eval_loss = evaluate_loss(eval_loader)
+            print('Step:', step, 'Evaluate Loss:', round(
+                eval_loss.item(), 3), 'Train Loss:', round(loss.item(), 3))
 
 
 train_loop()
 
-# Save the model state dictionary
-torch.save(model.state_dict(), 'model-ckpt.pt')
 
-# Generate
-model.eval()
-start = 'The salesperson'
-start_ids = text_to_ids(start)
-x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
-y = model.generate(x, max_new_tokens=100)
-print('---------------')
-print(idx_to_text(y[0].tolist()))
-print('---------------')
+print(f"saving checkpoint to {out_dir}")
+# Save the model state dictionary
+torch.save(model.state_dict(), os.path.join(out_dir, 'ckpt.pt'))
