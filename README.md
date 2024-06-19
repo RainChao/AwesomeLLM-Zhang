@@ -1,12 +1,9 @@
 # Transformer from scratch
 
-This is a **Transformer** based **Large Language Model (LLM)** training demo with only _~240 lines of code_.
+This is a **Transformer** based **Large Language Model (LLM)** which reproduces GPT-2 (124M) on OpenWebText dataset.
 
 Inspired by [nanoGPT](https://github.com/karpathy/nanoGPT), I wrote this demo to show how to train a LLM from scratch using PyTorch. 
 The code is very simple and easy to understand. It's a good start point for beginners to learn how to train a LLM.
-
-The demo is trained on a 450Kb [sample textbook](https://huggingface.co/datasets/goendalf666/sales-textbook_for_convincing_and_selling/raw/main/sales_textbook.txt) dataset, and the model size is about 51M. 
-I trained on a single i7 CPU, and the training time takes about 20 minutes, result in approximately ~1.3M parameters.
 
 
 # Get Started
@@ -14,12 +11,14 @@ I trained on a single i7 CPU, and the training time takes about 20 minutes, resu
 1. Install dependencies
 
 ```
-pip install numpy requests torch tiktoken
+pip install torch numpy transformers datasets tiktoken wandb tqdm
 ```
 2. Run model.py
+To reproduce GPT-2 (124M) you'll want at least an 8X A100 40GB node and run:
 
-First time when you run it, the program will download the dataset and save to `data` folder.
-Then the model will start training on the dataset. Training & validation `losses` will be printed on the console screen, something like:
+```sh
+torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
+```
 
 ``` 
 Step: 0 Training Loss: 11.68 Validation Loss: 11.681
@@ -44,25 +43,6 @@ It looks pretty descent!
 
 Feel free to change some of the hyperparameters on the top of the `model.py` file, and see how it affects the training process.
 
-3. Step-by-step Jupyter Notebook
-
-I also provide a step-by-step Jupyter Notebook `step-by-step.ipynb` to help you understand the architecture logic. To run this, you also need to insall:
-
-```
-pip install matplotlib pandas
-```
-
-This notebook prints out the intermediate results of each step followed by Transformer architecture from original paper, but only the **Decoder** part (Since GPT only use the decoder). So you can see how the model is trained each single step. For examples:
-
-- what a [4,16] matrix of input embedding looks like:
-
-```
-      0     1      2      3     4      5      6      7      8      9      10     11     12     13     14     15
-0    627  1383  88861    279  1989    315  25607  16940  65931    323  32097     11    584  26458  13520    449
-1  15749   311   9615   3619   872   6444      6   3966     11  10742     11    323  32097     13   3296  22815
-2  13189   315   1701   5557   304   6763    374  88861   7528  10758   7526     13   4314   7526   2997   2613
-3    323  6376   2867  26470  1603  16661    264  49148    627     18     13  81745  48023  75311   7246  66044
-```
 
 # Other contents in this repo
 
@@ -74,4 +54,3 @@ Under `/GPT2` directory, I put some sample code to show how to fine-tune a pre-t
 - [nanoGPT](https://github.com/karpathy/nanoGPT) Andrej Karpathy's famous video tutorial on how to build a GPT model from scratch.
 - [Transformers from Scratch](https://blog.matdmiller.com/posts/2023-06-10_transformers/notebook.html) A clear and easy implementation of Andrej's video contents by Mat Miller.
 - [Attention is all you need](https://arxiv.org/abs/1706.03762) The original paper of Transformer architecture.
-
