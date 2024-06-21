@@ -4,11 +4,14 @@ import numpy as np
 import torch
 from model import GPTConfig, GPT
 from data_set import *
+from contextlib import nullcontext
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 device_type = 'cuda' if 'cuda' in device else 'cpu'
+dtype = torch.bfloat16 if torch.cuda.is_available() and \
+    torch.cuda.is_bf16_supported() else torch.float16  # pylint: disable=line-too-long
 TORCH_SEED = 1337
 torch.manual_seed(TORCH_SEED)
 
@@ -95,7 +98,7 @@ if ddp:
 raw_model = model.module if ddp else model  # unwrap DDP container if needed
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
-# scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
+scaler = torch.cuda.amp.GradScaler(enabled=(dtype == torch.float16))
 # Use AdamW optimizer
 optimizer = torch.optim.AdamW(params=model.parameters(), lr=learning_rate)
 if init_from == 'resume':
@@ -144,10 +147,13 @@ x_batch, y_batch = get_batch(split='train')
 while True:
     x_batch = x_batch.to(device)
     y_batch = y_batch.to(device)
-    _, loss = model(x_batch, y_batch)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+    with torch.amp.autocast(device_type=device_type, dtype=dtype, enabled=(dtype == torch.float16 or dtype == torch.bfloat16)):
+        _, loss = model(x_batch, y_batch)
+
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+    optimizer.zero_grad(set_to_none=True)
 
     iter_num += 1
     if iter_num == max_iters:
