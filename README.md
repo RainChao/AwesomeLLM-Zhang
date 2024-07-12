@@ -17,7 +17,7 @@ pip install torch numpy transformers datasets tiktoken wandb tqdm
 To reproduce GPT-2 (124M) you'll want at least an 8X A100 40GB node and run:
 
 ```sh
-torchrun --standalone --nproc_per_node=8 train.py config/train_gpt2.py
+torchrun --standalone --nproc_per_node=8 train_gpt2.py
 ```
 
 ``` 
